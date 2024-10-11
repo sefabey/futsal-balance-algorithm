@@ -8,7 +8,27 @@ import streamlit as st  # For creating a simple UI
 import json
 
 # Load configuration from a local JSON file to retrieve settings for accessing Google Sheets and algorithm parameters
-with open('config.json') as config_file:
+import os
+
+# Determine if the app is running on Streamlit Cloud or locally
+if "SHEET_URL" in st.secrets:
+    # Load secrets from Streamlit Cloud
+    sheet_url = st.secrets["SHEET_URL"]
+    creds_dict = {
+        "type": st.secrets["CREDENTIALS_TYPE"],
+        "project_id": st.secrets["CREDENTIALS_PROJECT_ID"],
+        "private_key_id": st.secrets["CREDENTIALS_PRIVATE_KEY_ID"],
+        "private_key": st.secrets["CREDENTIALS_PRIVATE_KEY"],
+        "client_email": st.secrets["CREDENTIALS_CLIENT_EMAIL"],
+        "client_id": st.secrets["CREDENTIALS_CLIENT_ID"],
+        "auth_uri": st.secrets["CREDENTIALS_AUTH_URI"],
+        "token_uri": st.secrets["CREDENTIALS_TOKEN_URI"],
+        "auth_provider_x509_cert_url": st.secrets["CREDENTIALS_AUTH_PROVIDER_X509_CERT_URL"],
+        "client_x509_cert_url": st.secrets["CREDENTIALS_CLIENT_X509_CERT_URL"]
+    }
+else:
+    # Load configuration from a local JSON file to retrieve settings for accessing Google Sheets and algorithm parameters
+    with open('config.json') as config_file:
     # Example config.json format to be added for reference
     # {
     #     "SHEET_URL": "your_google_sheet_url",
@@ -88,7 +108,7 @@ def load_player_data_from_google_sheet(sheet_url):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets",
              "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
 
-    creds = ServiceAccountCredentials.from_json_keyfile_name(config['CREDENTIALS_PATH'], scope)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
 
     # Open the sheet by URL
@@ -105,7 +125,8 @@ def main():
     Main function to run the Streamlit interface for selecting futsal teams.
     Allows users to select players and runs the Simulated Annealing algorithm to balance the teams.
     """
-    sheet_url = config['SHEET_URL']
+    # Use the appropriate Google Sheets URL based on the environment
+    sheet_url = config['SHEET_URL'] if 'SHEET_URL' not in st.secrets else st.secrets['SHEET_URL']
 
     # Load player data
     players = load_player_data_from_google_sheet(sheet_url)
