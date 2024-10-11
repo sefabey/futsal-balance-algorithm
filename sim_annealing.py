@@ -8,33 +8,47 @@ import streamlit as st  # For creating a simple UI
 import json
 import os
 
-# Determine if the app is running on Streamlit Cloud or locally
-if "SHEET_URL" in st.secrets:
-    # Load secrets from Streamlit Cloud
-    sheet_url = st.secrets["SHEET_URL"]
-    creds_dict = {
-        "type": st.secrets["CREDENTIALS_TYPE"],
-        "project_id": st.secrets["CREDENTIALS_PROJECT_ID"],
-        "private_key_id": st.secrets["CREDENTIALS_PRIVATE_KEY_ID"],
-        "private_key": st.secrets["CREDENTIALS_PRIVATE_KEY"],
-        "client_email": st.secrets["CREDENTIALS_CLIENT_EMAIL"],
-        "client_id": st.secrets["CREDENTIALS_CLIENT_ID"],
-        "auth_uri": st.secrets["CREDENTIALS_AUTH_URI"],
-        "token_uri": st.secrets["CREDENTIALS_TOKEN_URI"],
-        "auth_provider_x509_cert_url": st.secrets["CREDENTIALS_AUTH_PROVIDER_X509_CERT_URL"],
-        "client_x509_cert_url": st.secrets["CREDENTIALS_CLIENT_X509_CERT_URL"]
-    }
+# Determine if the app is running on Streamlit Cloud (check for secrets)
+if os.getenv('STREAMLIT_SERVER'):  # Check if the app is running in Streamlit Cloud
+    try:
+        # Try loading secrets from Streamlit Cloud
+        sheet_url = st.secrets["SHEET_URL"]
+        creds_dict = {
+            "type": st.secrets["CREDENTIALS_TYPE"],
+            "project_id": st.secrets["CREDENTIALS_PROJECT_ID"],
+            "private_key_id": st.secrets["CREDENTIALS_PRIVATE_KEY_ID"],
+            "private_key": st.secrets["CREDENTIALS_PRIVATE_KEY"],
+            "client_email": st.secrets["CREDENTIALS_CLIENT_EMAIL"],
+            "client_id": st.secrets["CREDENTIALS_CLIENT_ID"],
+            "auth_uri": st.secrets["CREDENTIALS_AUTH_URI"],
+            "token_uri": st.secrets["CREDENTIALS_TOKEN_URI"],
+            "auth_provider_x509_cert_url": st.secrets["CREDENTIALS_AUTH_PROVIDER_X509_CERT_URL"],
+            "client_x509_cert_url": st.secrets["CREDENTIALS_CLIENT_X509_CERT_URL"]
+        }
+        username = st.secrets["USERNAME"]
+        password = st.secrets["PASSWORD"]
+    except Exception as e:
+        st.error("Error loading secrets from Streamlit Cloud: " + str(e))
+        st.stop()
 else:
     # Load configuration from a local JSON file to retrieve settings for accessing Google Sheets and algorithm parameters
-    with open('config.json') as config_file:
-        config = json.load(config_file)
+    try:
+        with open('config.json') as config_file:
+            config = json.load(config_file)
+        sheet_url = config["SHEET_URL"]
+        creds_path = config["CREDENTIALS_PATH"]
+        username = config["USERNAME"]
+        password = config["PASSWORD"]
 
-    sheet_url = config["SHEET_URL"]
-    creds_path = config["CREDENTIALS_PATH"]
-
-    # Load credentials from the JSON file locally
-    with open(creds_path) as f:
-        creds_dict = json.load(f)
+        # Load credentials from the JSON file locally
+        with open(creds_path) as f:
+            creds_dict = json.load(f)
+    except FileNotFoundError as e:
+        st.error("Local configuration file not found: " + str(e))
+        st.stop()
+    except KeyError as e:
+        st.error("Missing configuration value: " + str(e))
+        st.stop()
 
 # Authentication to Google Sheets
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets",
@@ -122,6 +136,23 @@ def main():
     Main function to run the Streamlit interface for selecting futsal teams.
     Allows users to select players and runs the Simulated Annealing algorithm to balance the teams.
     """
+    # Simple login system to secure access
+    if 'authenticated' not in st.session_state:
+        st.session_state['authenticated'] = False
+
+    if not st.session_state['authenticated']:
+        input_username = st.text_input("Username", key='username_input')
+        input_password = st.text_input("Password", type="password", key='password_input')
+        if st.button("Login"):
+            if input_username == username and input_password == password:
+                st.session_state['authenticated'] = True
+                st.success("Login successful")
+            else:
+                st.error("Incorrect username or password. Please try again.")
+        # Stop the execution here until the user successfully logs in
+        return
+
+    # Only proceed with the rest of the application if the user is authenticated
     # Load player data
     players = load_player_data_from_google_sheet(sheet_url)
 
