@@ -6,8 +6,6 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import streamlit as st  # For creating a simple UI
 import json
-
-# Load configuration from a local JSON file to retrieve settings for accessing Google Sheets and algorithm parameters
 import os
 
 # Determine if the app is running on Streamlit Cloud or locally
@@ -29,15 +27,21 @@ if "SHEET_URL" in st.secrets:
 else:
     # Load configuration from a local JSON file to retrieve settings for accessing Google Sheets and algorithm parameters
     with open('config.json') as config_file:
-    # Example config.json format to be added for reference
-    # {
-    #     "SHEET_URL": "your_google_sheet_url",
-    #     "CREDENTIALS_PATH": "path_to_your_credentials.json",
-    #     "INITIAL_TEMP": 1000,
-    #     "COOLING_RATE": 0.99,
-    #     "MAX_ITERATIONS": 100000
-    # }
-    config = json.load(config_file)
+        config = json.load(config_file)
+
+    sheet_url = config["SHEET_URL"]
+    creds_path = config["CREDENTIALS_PATH"]
+
+    # Load credentials from the JSON file locally
+    with open(creds_path) as f:
+        creds_dict = json.load(f)
+
+# Authentication to Google Sheets
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets",
+         "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
+
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+client = gspread.authorize(creds)
 
 # Global weights for evaluating team balance - used to determine the relative importance of each player attribute when evaluating team differences
 weights = {
@@ -104,13 +108,6 @@ def load_player_data_from_google_sheet(sheet_url):
     Load player data from a Google Sheet.
     Authenticates using Google Service Account credentials and returns player data as a list of dictionaries.
     """
-    # Authenticate and load data from Google Sheets
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets",
-             "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
-
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    client = gspread.authorize(creds)
-
     # Open the sheet by URL
     sheet = client.open_by_url(sheet_url)
     worksheet = sheet.worksheet("Roster")
@@ -125,9 +122,6 @@ def main():
     Main function to run the Streamlit interface for selecting futsal teams.
     Allows users to select players and runs the Simulated Annealing algorithm to balance the teams.
     """
-    # Use the appropriate Google Sheets URL based on the environment
-    sheet_url = config['SHEET_URL'] if 'SHEET_URL' not in st.secrets else st.secrets['SHEET_URL']
-
     # Load player data
     players = load_player_data_from_google_sheet(sheet_url)
 
