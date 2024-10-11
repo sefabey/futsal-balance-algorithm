@@ -8,10 +8,19 @@ import streamlit as st  # For creating a simple UI
 import json
 import os
 
-# Determine if the app is running on Streamlit Cloud (check for secrets)
-if os.getenv('STREAMLIT_SERVER'):  # Check if the app is running in Streamlit Cloud
+# Determine if the app is running on Streamlit Cloud by checking if Streamlit secrets are available
+is_streamlit_cloud = False
+try:
+    # Attempt to access st.secrets, if it exists, we are on Streamlit Cloud
+    _ = st.secrets["SHEET_URL"]
+    is_streamlit_cloud = True
+except (AttributeError, FileNotFoundError, KeyError):
+    # If st.secrets does not exist or key is missing, we're running locally
+    is_streamlit_cloud = False
+
+if is_streamlit_cloud:  # Check if the app is running in Streamlit Cloud
     try:
-        # Try loading secrets from Streamlit Cloud
+        # Load secrets from Streamlit Cloud
         sheet_url = st.secrets["SHEET_URL"]
         creds_dict = {
             "type": st.secrets["CREDENTIALS_TYPE"],
@@ -28,8 +37,8 @@ if os.getenv('STREAMLIT_SERVER'):  # Check if the app is running in Streamlit Cl
         username = st.secrets["USERNAME"]
         password = st.secrets["PASSWORD"]
     except Exception as e:
-        st.error("Error loading secrets from Streamlit Cloud: " + str(e))
-        st.stop()
+        st.error("Error loading secrets from Streamlit Cloud.")
+        st.stop()  # Stop execution if secrets cannot be loaded
 else:
     # Load configuration from a local JSON file to retrieve settings for accessing Google Sheets and algorithm parameters
     try:
@@ -43,19 +52,20 @@ else:
         # Load credentials from the JSON file locally
         with open(creds_path) as f:
             creds_dict = json.load(f)
-    except FileNotFoundError as e:
-        st.error("Local configuration file not found: " + str(e))
-        st.stop()
+    except FileNotFoundError:
+        st.error("Local configuration file not found.")
+        st.stop()  # Stop execution if config file is missing
     except KeyError as e:
-        st.error("Missing configuration value: " + str(e))
-        st.stop()
+        st.error("Missing configuration value.")
+        st.stop()  # Stop execution if any configuration value is missing
 
 # Authentication to Google Sheets
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets",
          "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
 
+# Create credentials for Google Sheets API using provided credentials
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-client = gspread.authorize(creds)
+client = gspread.authorize(creds)  # Authorize the client to interact with Google Sheets
 
 # Global weights for evaluating team balance - used to determine the relative importance of each player attribute when evaluating team differences
 weights = {
@@ -65,6 +75,7 @@ weights = {
     "bmi": 0.3,        # BMI is less important
     "position": 2,     # Position balance is the most important
 }
+
 
 def evaluate_team_balance(team1, team2):
     """
@@ -77,9 +88,14 @@ def evaluate_team_balance(team1, team2):
     fitness_diff = abs(sum(player['fitness_1_10'] for player in team1) - sum(player['fitness_1_10'] for player in team2)) * weights['fitness']
     vision_diff = abs(sum(player['vision_5_10'] for player in team1) - sum(player['vision_5_10'] for player in team2)) * weights['vision']
     bmi_diff = abs(sum(player['bmi'] for player in team1) - sum(player['bmi'] for player in team2)) * weights['bmi']
+    
+    # Calculate positional imbalance penalty
     position_penalty = 0
     for pos in ['Defender', 'Midfielder', 'Attacker', 'Goalkeeper']:
+        # Calculate the difference in number of players per position between the two teams
         position_penalty += abs(sum(1 for player in team1 if player['preferred_position'] == pos) - sum(1 for player in team2 if player['preferred_position'] == pos)) * weights['position']
+    
+    # Return the total imbalance score
     return skill_diff + fitness_diff + vision_diff + bmi_diff + position_penalty
 
 def simulated_annealing(players, initial_temp, cooling_rate, max_iterations, team_size):
@@ -87,15 +103,17 @@ def simulated_annealing(players, initial_temp, cooling_rate, max_iterations, tea
     Use the Simulated Annealing algorithm to find the most balanced team distribution.
     The algorithm iteratively improves team balance by swapping players and allowing controlled randomness to avoid local minima.
     """
+    # Randomly shuffle players to create initial teams
     random.shuffle(players)
     team1 = players[:team_size]
     team2 = players[team_size:team_size*2]
     current_score = evaluate_team_balance(team1, team2)
-    temp = initial_temp
+    temp = initial_temp  # Set initial temperature for simulated annealing
     best_score = current_score
     best_solution = (deepcopy(team1), deepcopy(team2))
     
     for iteration in range(max_iterations):
+        # Create a new potential solution by swapping players between teams
         new_team1 = deepcopy(team1)
         new_team2 = deepcopy(team2)
         player1 = random.choice(new_team1)
@@ -104,13 +122,20 @@ def simulated_annealing(players, initial_temp, cooling_rate, max_iterations, tea
         new_team2.remove(player2)
         new_team1.append(player2)
         new_team2.append(player1)
+        
+        # Calculate the score of the new team configuration
         new_score = evaluate_team_balance(new_team1, new_team2)
+        
+        # Accept the new configuration if it improves the score or based on a probability function
         if new_score < current_score or random.uniform(0, 1) < math.exp((current_score - new_score) / temp):
             team1, team2 = new_team1, new_team2
             current_score = new_score
+            # Update the best solution if the new score is better
             if new_score < best_score:
                 best_score = new_score
                 best_solution = (deepcopy(new_team1), deepcopy(new_team2))
+        
+        # Decrease the temperature to reduce the probability of accepting worse solutions
         temp *= cooling_rate
     
     return best_solution, best_score
@@ -122,14 +147,14 @@ def load_player_data_from_google_sheet(sheet_url):
     Load player data from a Google Sheet.
     Authenticates using Google Service Account credentials and returns player data as a list of dictionaries.
     """
-    # Open the sheet by URL
+    # Open the sheet by URL and select the worksheet
     sheet = client.open_by_url(sheet_url)
     worksheet = sheet.worksheet("Roster")
 
-    # Convert to a pandas DataFrame
+    # Retrieve all records from the worksheet and convert to a pandas DataFrame
     data = worksheet.get_all_records()
     player_df = pd.DataFrame(data)
-    return player_df.to_dict('records')
+    return player_df.to_dict('records')  # Return the player data as a list of dictionaries
 
 def main():
     """
@@ -141,9 +166,11 @@ def main():
         st.session_state['authenticated'] = False
 
     if not st.session_state['authenticated']:
+        # Input fields for username and password
         input_username = st.text_input("Username", key='username_input')
         input_password = st.text_input("Password", type="password", key='password_input')
         if st.button("Login"):
+            # Check credentials
             if input_username == username and input_password == password:
                 st.session_state['authenticated'] = True
                 st.success("Login successful")
@@ -153,7 +180,7 @@ def main():
         return
 
     # Only proceed with the rest of the application if the user is authenticated
-    # Load player data
+    # Load player data from Google Sheet
     players = load_player_data_from_google_sheet(sheet_url)
 
     # Create a simple interface using Streamlit
@@ -182,9 +209,9 @@ def main():
         team_size = total_players // 2
 
         # Simulated Annealing Parameters
-        initial_temp = config.get('INITIAL_TEMP', 1000)  # Initial temperature
-        cooling_rate = config.get('COOLING_RATE', 0.99)  # Cooling rate
-        max_iterations = config.get('MAX_ITERATIONS', 100000)  # Maximum number of iterations
+        initial_temp = 1000  # Initial temperature
+        cooling_rate = 0.99  # Cooling rate
+        max_iterations = 100000  # Maximum number of iterations
 
         # Run the Simulated Annealing algorithm to balance the teams
         best_teams, best_score = simulated_annealing(participants, initial_temp, cooling_rate, max_iterations, team_size)
