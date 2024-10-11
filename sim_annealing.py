@@ -12,30 +12,30 @@ import os
 is_streamlit_cloud = False
 try:
     # Attempt to access st.secrets, if it exists, we are on Streamlit Cloud
-    _ = st.secrets["SHEET_URL"]
-    is_streamlit_cloud = True
-except (AttributeError, FileNotFoundError, KeyError):
-    # If st.secrets does not exist or key is missing, we're running locally
+    if st.secrets._secrets is not None:
+        is_streamlit_cloud = True
+except Exception:
+    # If st.secrets does not exist or any exception occurs, we're running locally
     is_streamlit_cloud = False
 
 if is_streamlit_cloud:  # Check if the app is running in Streamlit Cloud
     try:
         # Load secrets from Streamlit Cloud
-        sheet_url = st.secrets["SHEET_URL"]
+        sheet_url = st.secrets.get("SHEET_URL")
         creds_dict = {
-            "type": st.secrets["CREDENTIALS_TYPE"],
-            "project_id": st.secrets["CREDENTIALS_PROJECT_ID"],
-            "private_key_id": st.secrets["CREDENTIALS_PRIVATE_KEY_ID"],
-            "private_key": st.secrets["CREDENTIALS_PRIVATE_KEY"],
-            "client_email": st.secrets["CREDENTIALS_CLIENT_EMAIL"],
-            "client_id": st.secrets["CREDENTIALS_CLIENT_ID"],
-            "auth_uri": st.secrets["CREDENTIALS_AUTH_URI"],
-            "token_uri": st.secrets["CREDENTIALS_TOKEN_URI"],
-            "auth_provider_x509_cert_url": st.secrets["CREDENTIALS_AUTH_PROVIDER_X509_CERT_URL"],
-            "client_x509_cert_url": st.secrets["CREDENTIALS_CLIENT_X509_CERT_URL"]
+            "type": st.secrets.get("CREDENTIALS_TYPE"),
+            "project_id": st.secrets.get("CREDENTIALS_PROJECT_ID"),
+            "private_key_id": st.secrets.get("CREDENTIALS_PRIVATE_KEY_ID"),
+            "private_key": st.secrets.get("CREDENTIALS_PRIVATE_KEY"),
+            "client_email": st.secrets.get("CREDENTIALS_CLIENT_EMAIL"),
+            "client_id": st.secrets.get("CREDENTIALS_CLIENT_ID"),
+            "auth_uri": st.secrets.get("CREDENTIALS_AUTH_URI"),
+            "token_uri": st.secrets.get("CREDENTIALS_TOKEN_URI"),
+            "auth_provider_x509_cert_url": st.secrets.get("CREDENTIALS_AUTH_PROVIDER_X509_CERT_URL"),
+            "client_x509_cert_url": st.secrets.get("CREDENTIALS_CLIENT_X509_CERT_URL")
         }
-        username = st.secrets["USERNAME"]
-        password = st.secrets["PASSWORD"]
+        username = st.secrets.get("USERNAME")
+        password = st.secrets.get("PASSWORD")
     except Exception as e:
         st.error("Error loading secrets from Streamlit Cloud.")
         st.stop()  # Stop execution if secrets cannot be loaded
@@ -44,10 +44,10 @@ else:
     try:
         with open('config.json') as config_file:
             config = json.load(config_file)
-        sheet_url = config["SHEET_URL"]
-        creds_path = config["CREDENTIALS_PATH"]
-        username = config["USERNAME"]
-        password = config["PASSWORD"]
+        sheet_url = config.get("SHEET_URL")
+        creds_path = config.get("CREDENTIALS_PATH")
+        username = config.get("USERNAME")
+        password = config.get("PASSWORD")
 
         # Load credentials from the JSON file locally
         with open(creds_path) as f:
@@ -75,7 +75,6 @@ weights = {
     "bmi": 0.3,        # BMI is less important
     "position": 2,     # Position balance is the most important
 }
-
 
 def evaluate_team_balance(team1, team2):
     """
