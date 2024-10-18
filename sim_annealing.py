@@ -8,7 +8,7 @@ import streamlit as st  # For creating a simple UI
 import json
 import os
 
-
+#random seed fix
 random.seed(42)
 
 # Determine if the app is running on Streamlit Cloud by checking if Streamlit secrets are available
