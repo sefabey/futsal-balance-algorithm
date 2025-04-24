@@ -109,7 +109,7 @@ def simulated_annealing(players, initial_temp, cooling_rate, max_iterations, tea
         temp *= cooling_rate
     return best_solution, best_score
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(ttl=300,show_spinner=False) # refresh Google-Sheet pull every five minutes
 def load_player_data_from_google_sheet(sheet_url):
     sheet = client.open_by_url(sheet_url)
     worksheet = sheet.worksheet("Roster")
